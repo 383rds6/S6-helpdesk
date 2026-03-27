@@ -606,6 +606,14 @@
 </div>
 
 <script>
+  // ── JSONBin Configuration ──────────────────────────────────
+  // 1. Go to https://jsonbin.io and create a free account
+  // 2. Create a new Bin with this initial content: {"tickets":[]}
+  // 3. Copy your Bin ID and Master Key and paste them below
+  const JSONBIN_ID  = '69c70ae2c3097a1dd569f663';
+  const JSONBIN_KEY = '$2a$10$rmrHPFv6HbvbBgjI0Wv0N.M4GqG1VbqRt3DUZzYCXZCHSLumXHsZC';
+  // ──────────────────────────────────────────────────────────
+
   const desc = document.getElementById('description');
   const counter = document.getElementById('charCount');
   desc.addEventListener('input', () => {
@@ -686,16 +694,29 @@
       order: Date.now()
     };
 
-    // Save to shared persistent storage (visible across all devices)
+    // Save ticket to JSONBin (shared across all devices)
     (async () => {
       try {
+        // 1. Read existing tickets
         let existing = [];
         try {
-          const res = await window.storage.get('s6_tickets', true);
-          existing = JSON.parse(res.value);
+          const getRes = await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_ID + '/latest', {
+            headers: { 'X-Master-Key': JSONBIN_KEY }
+          });
+          const getData = await getRes.json();
+          existing = getData.record.tickets || [];
         } catch(e) { existing = []; }
+
+        // 2. Add new ticket and save
         existing.push(ticket);
-        await window.storage.set('s6_tickets', JSON.stringify(existing), true);
+        await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_ID, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Master-Key': JSONBIN_KEY
+          },
+          body: JSON.stringify({ tickets: existing })
+        });
       } catch(err) {
         console.error('Storage error:', err);
       }

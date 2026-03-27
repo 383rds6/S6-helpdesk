@@ -703,17 +703,33 @@ if (isLoggedIn()) {
   document.getElementById('app').style.display = 'block';
 }
 
-// ── STORAGE (shared persistent — works across all devices) ────
+// ── JSONBin Configuration ─────────────────────────────────────
+// Must match the values in index.html
+const JSONBIN_ID  = '69c70ae2c3097a1dd569f663';
+const JSONBIN_KEY = '$2a$10$rmrHPFv6HbvbBgjI0Wv0N.M4GqG1VbqRt3DUZzYCXZCHSLumXHsZC';
+
+// ── STORAGE (JSONBin — shared across all devices) ──────────────
 async function getTickets() {
   try {
-    const res = await window.storage.get('s6_tickets', true);
-    return JSON.parse(res.value);
+    const res = await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_ID + '/latest', {
+      headers: { 'X-Master-Key': JSONBIN_KEY }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.record.tickets || [];
   } catch(e) { return []; }
 }
 
 async function saveTickets(tickets) {
   try {
-    await window.storage.set('s6_tickets', JSON.stringify(tickets), true);
+    await fetch('https://api.jsonbin.io/v3/b/' + JSONBIN_ID, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_KEY
+      },
+      body: JSON.stringify({ tickets: tickets })
+    });
   } catch(e) { console.error('Save error:', e); }
 }
 
