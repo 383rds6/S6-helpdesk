@@ -703,18 +703,37 @@ if (isLoggedIn()) {
   document.getElementById('app').style.display = 'block';
 }
 
-// ── STORAGE ───────────────────────────────────────────────────
-function getTickets() { return JSON.parse(localStorage.getItem('s6_tickets') || '[]'); }
-function saveTickets(t) { localStorage.setItem('s6_tickets', JSON.stringify(t)); }
+// ── STORAGE (shared persistent — works across all devices) ────
+async function getTickets() {
+  try {
+    const res = await window.storage.get('s6_tickets', true);
+    return JSON.parse(res.value);
+  } catch(e) { return []; }
+}
+
+async function saveTickets(tickets) {
+  try {
+    await window.storage.set('s6_tickets', JSON.stringify(tickets), true);
+  } catch(e) { console.error('Save error:', e); }
+}
 
 // ── STATE ─────────────────────────────────────────────────────
 let currentFilter = 'open';
 let dragSrcId = null;
 
 // ── RENDER ────────────────────────────────────────────────────
-function renderAll() {
+async function renderAll() {
   if (!isLoggedIn()) return;
-  const tickets = getTickets();
+  const tickets = await getTickets();
+  // Default sort: by priority (set from rank at submission), then by date within same priority
+  // Admin can override with drag-to-reorder or sort buttons
+  tickets.sort((a, b) => {
+    const pa = PRIORITY_ORDER[a.priority] ?? 4;
+    const pb = PRIORITY_ORDER[b.priority] ?? 4;
+    if (pa !== pb) return pa - pb;
+    // Same priority → sort by submission time (oldest first)
+    return new Date(a.timestamp) - new Date(b.timestamp);
+  });
   renderStats(tickets);
   renderList(tickets);
   updateCountLabel(tickets);
@@ -879,8 +898,8 @@ function buildCard(ticket) {
 }
 
 // ── ACTIONS ───────────────────────────────────────────────────
-function toggleComplete(id) {
-  const tickets = getTickets();
+async function toggleComplete(id) {
+  const tickets = await getTickets();
   const t = tickets.find(x => x.id === id);
   if (!t) return;
   if (t.status === 'open') {
@@ -890,64 +909,61 @@ function toggleComplete(id) {
     t.status = 'open';
     t.completedAt = null;
   }
-  saveTickets(tickets);
+  await saveTickets(tickets);
   renderAll();
 }
 
-function changePriority(id, priority) {
-  const tickets = getTickets();
+async function changePriority(id, priority) {
+  const tickets = await getTickets();
   const t = tickets.find(x => x.id === id);
   if (!t) return;
   t.priority = priority;
-  saveTickets(tickets);
+  await saveTickets(tickets);
   renderAll();
 }
 
-function deleteTicket(id) {
-  const tickets = getTickets().filter(x => x.id !== id);
-  saveTickets(tickets);
+async function deleteTicket(id) {
+  const tickets = (await getTickets()).filter(x => x.id !== id);
+  await saveTickets(tickets);
   renderAll();
 }
 
-function reorder(srcId, targetId) {
-  const tickets = getTickets();
+async function reorder(srcId, targetId) {
+  const tickets = await getTickets();
   const src    = tickets.find(t => t.id === srcId);
   const target = tickets.find(t => t.id === targetId);
   if (!src || !target) return;
 
-  // Swap order values
-  const tmp   = src.order;
-  src.order   = target.order;
+  const tmp    = src.order;
+  src.order    = target.order;
   target.order = tmp;
 
-  // Re-sort array by order
   tickets.sort((a, b) => (a.order || 0) - (b.order || 0));
-  saveTickets(tickets);
+  await saveTickets(tickets);
   renderAll();
 }
 
 // Sort buttons
-document.getElementById('sortPriorityBtn').addEventListener('click', () => {
-  const tickets = getTickets();
+document.getElementById('sortPriorityBtn').addEventListener('click', async () => {
+  const tickets = await getTickets();
   tickets.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4));
-  // Re-assign order values
   tickets.forEach((t, i) => t.order = i * 1000);
-  saveTickets(tickets);
+  await saveTickets(tickets);
   renderAll();
 });
 
-document.getElementById('sortDateBtn').addEventListener('click', () => {
-  const tickets = getTickets();
+document.getElementById('sortDateBtn').addEventListener('click', async () => {
+  const tickets = await getTickets();
   tickets.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   tickets.forEach((t, i) => t.order = i * 1000);
-  saveTickets(tickets);
+  await saveTickets(tickets);
   renderAll();
 });
 
-document.getElementById('clearCompletedBtn').addEventListener('click', () => {
+document.getElementById('clearCompletedBtn').addEventListener('click', async () => {
   if (!confirm('Remove all completed tickets?')) return;
-  const tickets = getTickets().filter(t => t.status !== 'completed');
-  saveTickets(tickets);
+  const tickets = (await getTickets()).filter(t => t.status !== 'completed');
+  await saveTickets(tickets);
   renderAll();
 });
 
